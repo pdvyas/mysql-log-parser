@@ -37,10 +37,16 @@ _SLOW_USERHOST_CRE = re.compile(r"#\s+User@Host:\s+"
                                 r"([\w\d\.\-]*)\s*"
                                 r"\[\s*([\d.]*)\s*\]\s*"
                                 r"(?:Id\:\s*(\d+)?\s*)?")
+
 _SLOW_STATS_CRE = re.compile(r"#\sQuery_time:\s(\d*\.\d{1,6})\s*"
             r"Lock_time:\s(\d*\.\d{1,6})\s*"
             r"Rows_sent:\s(\d*)\s*"
-            r"Rows_examined:\s(\d*)")
+            r"Rows_examined:\s(\d*)\s*"
+            r"Rows_affected:\s(\d*)\s*"
+            r"Rows_read:\s(\d*)")
+
+_THREAD_INFO_CRE = re.compile(r"#\sThread_id:\s(\d*)\s*"
+                                r"Schema:\s(.*)")
 
 _GENERAL_ENTRY_CRE = re.compile(
             r'(?:('+ _DATE_PAT +'))?\s*'
@@ -570,6 +576,25 @@ class SlowQueryLog(LogParserBase):
         entry['host'] = host if host else ip
         entry['session_id'] = sid
 
+    def _parse_thread_info(self, line, entry):
+        """Parses thread info
+
+        line[in]    a string
+        entry[in]   a SlowQueryLog-instance
+
+        The line paramater should be a string, a line read from the Slow Query
+        Log. The entry argument should be an instance of SlowQueryLogEntry.
+
+        Raises LogParserError on failure.
+        """
+        # Example:
+        # # Thread_id: 23733137  Schema: 69hzw9btqxbkg06g
+
+        (thread_id, schema) = self._parse_line(_THREAD_INFO_CRE, line)
+
+        entry['thread_id'] = thread_id
+        entry['schema'] = schema
+
     def _parse_timestamp(self, line, entry):
         """Parses a timestamp
 
@@ -610,6 +635,8 @@ class SlowQueryLog(LogParserBase):
         entry['lock_time'] = decimal.Decimal(result[1])
         entry['rows_sent'] = int(result[2])
         entry['rows_examined'] = int(result[3])
+        entry['rows_affected'] = int(result[4])
+        entry['rows_read'] = int(result[5])
     
     def _parse_query(self, line, entry):
         """Parses the query
@@ -690,8 +717,13 @@ class SlowQueryLog(LogParserBase):
             self._parse_timestamp(line, entry)
             line = self._get_next_line()
 
+
         if line.startswith('# User@Host:'):
             self._parse_connection_info(line, entry)
+            line = self._get_next_line()
+
+        if line.startswith('# Thread_id'):
+            self._parse_thread_info(line, entry)
             line = self._get_next_line()
 
         if line.startswith('# Query_time:'):
@@ -774,6 +806,8 @@ class SlowQueryLogEntry(LogEntryBase):
         self['lock_time'] = None
         self['rows_examined'] = None
         self['rows_sent'] = None
+        self['rows_affected'] = None
+        self['rows_read'] = None
 
     def __str__(self):
         """String representation of SlowQueryLogEntry
