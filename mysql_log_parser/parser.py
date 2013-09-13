@@ -91,6 +91,7 @@ class LogParserBase(object):
         line = None
         try:
             self._stream = stream
+            start_pos = stream.tell()
             line = self._get_next_line()
         except AttributeError:
             raise LogParserError("Need a file type")
@@ -99,7 +100,7 @@ class LogParserBase(object):
         if line is not None and line.endswith('started with:'):
             self._parse_header(line)
         else:
-            self._stream.seek(0)
+            self._stream.seek(start_pos)
     
     def _get_next_line(self):
         """Get next line from the log file
